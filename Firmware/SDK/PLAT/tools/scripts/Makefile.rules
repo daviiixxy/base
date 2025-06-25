@@ -1,0 +1,126 @@
+# default target
+all::
+
+include $(TOP)/SDK/PLAT/tools/scripts/Makefile.vars
+
+ifeq ($(TOOLCHAIN),GCC)
+BUILDDIR ?= ../../Build/$(PROJECT)
+endif
+
+LIBDIR   ?= $(TOP)/SDK/PLAT/prebuild
+HT_LIBDIR := $(TOP)/HT_Prebuild/Libs
+
+#-------------------------------------------------------------------------------
+#		Rules
+#-------------------------------------------------------------------------------
+include $(TOP)/SDK/Makefile.inc
+include $(TOP)/SDK/PLAT/device/target/Makefile.inc
+include $(TOP)/SDK/PLAT/driver/Makefile.inc
+include $(TOP)/SDK/PLAT/os/Makefile.inc
+include $(TOP)/SDK/PLAT/middleware/developed/Makefile.inc
+include $(TOP)/SDK/PLAT/middleware/thirdparty/Makefile.inc
+include $(TOP)/HT_Prebuild/Makefile.inc
+
+ifeq ($(BUILD_USE_PREBUILD_LIB),n)
+ifeq ($(BUILD_FW),y)
+ifeq ($(BUILD_ONLY_USE_PHY_LIB),n)
+include $(TOP)/SDK/FIRMWARE/SRC/Makefile.inc
+else
+include $(LIBDIR)/FW/Makefile.inc
+endif
+endif
+ifeq ($(BUILD_PS),y)
+include $(TOP)/SDK/PROTOCOL/SRC/ps/Makefile.inc
+include $(TOP)/SDK/PROTOCOL/SRC/tcpip/Makefile.inc
+include $(TOP)/SDK/PROTOCOL/SRC/psl1/Makefile.inc
+endif
+else
+ifeq ($(BUILD_FW),y)
+include $(LIBDIR)/FW/Makefile.inc
+endif
+ifeq ($(BUILD_PS),y)
+include $(LIBDIR)/PS/Makefile.inc
+endif
+include $(LIBDIR)/PLAT/Makefile.inc
+endif
+
+vpath %.c $(TOP)
+vpath %.s $(TOP)
+vpath %.S $(TOP)
+
+OBJS := $(addprefix $(BUILDDIR)/, $(obj-y))
+HT_DRIVER_LIB := $(addprefix $(BUILDDIR)/,$(ht_app_api-y))
+HT_THIRDPARTY_LIB := $(addprefix $(BUILDDIR)/,$(ht_thirdparty_api-y))
+HT_STARTUP_OBJS := $(addprefix $(BUILDDIR)/,$(ht_startup_lib-y))
+HT_MODULAR_LIBRARIES := $(addprefix $(BUILDDIR)/,$(ht_prebuild_libraries))
+
+-include $(OBJS:.o=.d)
+
+.PHONY: all build clean size cleanall
+
+all:: build
+
+ifeq ($(TOOLCHAIN),GCC)
+
+build: $(BUILDDIR)/$(BINNAME).elf \
+	$(BUILDDIR)/$(BINNAME).symbols \
+	$(BUILDDIR)/$(BINNAME).bin
+	
+endif
+
+ifeq ($(TOOLCHAIN),ARMCC)
+
+build: $(BUILDDIR)/$(BINNAME).axf
+
+endif
+
+$(BUILDDIR):
+	@mkdir -p $(BUILDDIR)
+
+$(LIBDIR):
+	@mkdir -p $(LIBDIR)
+
+ifeq ($(TOOLCHAIN),GCC)
+
+$(BUILDDIR)/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(ECHO) CC $<
+	$(ECHO) $@
+	$(Q)$(CC) $(CFLAGS) $(CFLAGS_CPU) $(CFLAGS_INC) $(CFLAGS_DEFS) $(DEPFLAGS) -c $< -o $@
+
+$(BUILDDIR)/%.o: %.s
+	@mkdir -p $(dir $@)
+	$(ECHO) ASM $<
+	$(Q)$(CC) $(CFLAGS_ASM) $(CFLAGS_CPU) $(CFLAGS_INC) $(CFLAGS_DEFS) $(DEPFLAGS) -c $< -o $@
+
+$(BUILDDIR)/%.o: %.S
+	@mkdir -p $(dir $@)
+	$(ECHO) ASM $<
+	$(Q)$(CC) $(CFLAGS) $(CFLAGS_CPU) $(CFLAGS_INC) $(CFLAGS_DEFS) $(DEPFLAGS) -c $< -o $@
+
+$(BUILDDIR)/$(BINNAME).elf: $(HT_MODULAR_LIBRARIES) $(OBJS) $(HT_STARTUP_OBJS) $(HT_DRIVER_LIB) $(HT_THIRDPARTY_LIB) $(linker-script-y)
+	$(Q)$(CC) $(LDFLAGS) $(CFLAGS_CPU) $(CFLAGS_DEFS) -T$(linker-script-y) -Wl,-Map,$(BUILDDIR)/$(BINNAME).map -o $@ $(OBJS) -Wl,--start-group $(HT_DRIVER_LIB) $(HT_THIRDPARTY_LIB) $(HT_STARTUP_OBJS) $(HT_MODULAR_LIBRARIES) $(PREBUILDLIBS) -Wl,--end-group -Wl,--no-undefined
+	@echo 'Finished building target: $@'
+	@echo ' '
+
+	
+$(BUILDDIR)/$(BINNAME).symbols: $(BUILDDIR)/$(BINNAME).elf
+	$(Q)$(NM) $< >$@
+
+$(BUILDDIR)/$(BINNAME).bin: $(BUILDDIR)/$(BINNAME).elf
+	$(ECHO) OBJCOPY $@
+	$(Q)$(OBJCOPY) -O binary $< $@
+	@$(OBJDUMP) -d -h $< > $(BUILDDIR)/$(BINNAME).txt
+	@$(SIZE) $(OBJECTS) $(BUILDDIR)/$(BINNAME).elf
+
+clean:
+	@rm -rf $(BUILDDIR)/*
+
+cleanall:
+	@rm -r ../../Build
+
+size: $(BUILDDIR)/$(BINNAME).elf
+	@$(SIZE) $(OBJECTS) $(BUILDDIR)/$(BINNAME).elf
+
+endif
+

@@ -1,0 +1,219 @@
+#===============================================================================
+#
+# IoTApp Dataservices APSS TX Include Paths
+#
+# GENERAL DESCRIPTION
+#    build script
+#
+# Copyright (c) 2017 by QUALCOMM Technologies, Inc. All Rights Reserved.
+#
+#-------------------------------------------------------------------------------
+#                      EDIT HISTORY FOR FILE
+#
+#  $Header: //components/dev/dataservices.tx/6.0/nchagant.dataservices.tx.6.0.07_07/iot_app/m2m/lwm2m/build/lwm2m.scons#1 $
+#  $DateTime: 2020/07/07 09:50:09 $
+#                      
+#  This section contains comments describing changes made to the module.
+#  Notice that changes are listed in reverse chronological order.
+#  
+#===============================================================================
+Import('env')
+
+env = env.Clone()
+
+if 'USES_ENABLE_LWM2M' not in env:
+	Return()
+
+if 'USES_QCLI' not in env:
+	env.AddUsesFlags('QCLI_DISABLED')
+
+if 'USES_MOB' in env:
+	env.AddUsesFlags('QCLI_DISABLED')
+
+if 'QCLI_DISABLED' not in env:
+	env.Append(CPPDEFINES = 'ENABLE_INTERNAL_BUILD')
+#Setting build path
+SRCPATH = '${BUILD_ROOT}/dataservices/iot_app/m2m/lwm2m'
+env.VariantDir('${BUILDPATH}', SRCPATH, duplicate=0)
+
+# Setting compilation flags and macros
+#===============================================================================
+#-DWMS_SMS_SUPPORT - Macro will enable support to recevie MT SMS
+# LWM2M_CLIENT_MODE - Enables LWM2M Client behaviour 
+# LWM2M_LITTLE_ENDIAN - Enables Little Endian Format
+# AUTHORIZATION_SUPPORT - Enables ACL permission checking
+# ENABLE_DEVCAP_OBJ - Enables Device Capability Object
+# ENABLE_SOFTWARE_MGNT_OBJ - Enables Software Management Object 
+# LWM2M_SERVER_OBJECT - Enables Server Object Enhancements
+# CONNECTIVITY_STATS_ENHANCEMENT - Enables Connectivity Stats Object Enhancements
+# ACL_ENHANCEMENTS - Enables ACL Object Enhancements
+# EP_ATTR_FIX - Enables EP attribute fix
+# ACL_OBJ_FIX - Enables ACL object fixes
+# LWM2M_SUPPORT_JSON - Enables JSON format support
+# BOOTSRAP_ENABLED - Enables Bootstrap Interface
+# LWM2M_STACK_SIZE - LWM2M App Stack Size
+# LWM2M_PRIORITY - LWM2M App priority
+# ENABLE_CONN_MONITOR - Enables Connectivity Monitor Object
+# ENABLE_FIRMWARE_OBJ - Enables Firmware Object
+# ENABLE_CONN_STAT_OBJ - Enables Connectivity Stats Object
+# ENABLE_CELL_NW_CONN_OBJ - Enables Cellular Network Connectivity Object
+# ENABLE_APN_CONN_OBJ - Enables APN Connection Object
+# ENABLE_HOST_DEV_OBJ - Enables Host Device Object
+#===============================================================================
+env.Append(CFLAGS = ['-DLWM2M_CLIENT_MODE', '-DLWM2M_LITTLE_ENDIAN', '-DLWM2M_STACK_SIZE=16384', '-DLWM2M_PRIORITY=180'])
+env.Append(CFLAGS = ['-DAUTHORIZATION_SUPPORT','-DENABLE_DEVCAP_OBJ', 
+					'-DENABLE_SOFTWARE_MGNT_OBJ', '-DLWM2M_SERVER_OBJECT', '-DENABLE_CONN_MONITOR',
+					'-DCONNECTIVITY_STATS_ENHANCEMENT', '-DACL_ENHANCEMENTS', '-DEP_ATTR_FIX', '-DACL_OBJ_FIX', '-DBLOCK1_SUPPORT',
+					'-DFACTORY_BOOTSTRAPPING', '-DDTLS_SUPPORT','-DWMS_SMS_SUPPORT', 
+					'-DENABLE_FIRMWARE_OBJ','-DENABLE_CONN_STAT_OBJ', '-DENABLE_CELL_NW_CONN_OBJ', '-DENABLE_APN_CONN_OBJ', '-DENABLE_HOST_DEV_OBJ'
+					])
+#env.Append(CFLAGS = [])
+if 'yes' == env['JSON_SUPPORTED']:
+    env.Append(CFLAGS = ['-DLWM2M_SUPPORT_JSON'])
+    
+if 'yes' == env['BOOTSRAP_ENABLED']:
+    env.Append(CFLAGS = ['-DLWM2M_BOOTSTRAP'])
+
+if 'yes' == env['TEST_ENABLED']:
+    env.Append(CFLAGS = ['-DUNIT_TEST'])
+
+if 'yes' == env['CLI_LOGGING']:
+    env.Append(CFLAGS = ['-DCLI_LOGGING']) 
+
+#Changes for MOB
+if 'USES_MOB' in env:
+	env.RequirePublicApi('STUB',area='offtarget')
+	env.RequireRestrictedApi(['DS_UTILS'])
+	env.RequirePublicApi('QAPI_STUB')
+	env.RequirePublicApi('SYSTEMDRIVERS')
+	env.RequirePublicApi('SERVICES')
+	env.RequirePublicApi('WMS', area='qmimsgs')
+	env.RequirePublicApi('NAS', area='qmimsgs')
+	env.RequirePublicApi('DMS', area='qmimsgs')
+	env.RequirePublicApi('WDS', area='qmimsgs')
+	env.RequirePublicApi('PSM', area='qmimsgs')
+	env.RequirePublicApi('COMMON', area='qmimsgs')
+	env.RequirePublicApi(['PSM_CLIENT'])
+
+INC_DIRS = [
+   '${INC_ROOT}/dataservices/netservice/services/coap/api',
+]
+    
+# Setting path for file inclusions
+env.RequirePublicApi(['KERNEL'], area='core')
+env.RequirePublicApi(['SERVICES'], area='core')
+env.RequirePublicApi(['DAL'], area='core')
+env.RequirePublicApi(['DEBUGTOOLS'], area='core')
+env.RequirePublicApi(['DATASERVICES_NET_IPSTACK'])
+env.RequirePublicApi(['NICHESTACK'])
+env.RequirePublicApi(['QAPI'])
+env.RequireRestrictedApi(['DS_UTILS'])
+env.RequirePublicApi(['QAPI'], area='dataservices')
+env.RequirePublicApi('SYSTEMDRIVERS', area='core')
+env.RequirePublicApi('HWENGINES', area='core')
+env.RequirePublicApi('DAL', area='core')
+env.RequirePublicApi('MEMORY', area='core')
+env.RequirePublicApi('POWER', area='core')
+env.RequirePublicApi('MPROC', area='core')
+env.RequirePublicApi('STORAGE', area='core')
+env.RequirePublicApi('WIREDCONNECTIVITY', area='core')
+env.RequirePublicApi('STORAGE_FILESYSTEM', area='core')
+env.RequirePublicApi('STORAGE_FLASH', area='core')
+env.RequirePublicApi('BUSES', area='core')
+env.RequirePublicApi(['DSS_NET'],area='dataservices')
+env.RequirePublicApi('WMS', area='api')
+env.RequirePublicApi('NAS', area='api')
+env.RequirePublicApi('DMS', area='api')
+env.RequirePublicApi('WDS', area='api')
+env.RequirePublicApi('PSM', area='api')
+env.RequirePublicApi('COMMON', area='api')
+env.RequireRestrictedApi(['QCLI_DEMO'])
+env.RequireRestrictedApi(['TS_M2M_COMMON'])
+env.RequireRestrictedApi(['FOTA'])
+env.RequireRestrictedApi([
+	'LWM2M',
+	'M2M_CORE'
+])
+env.RequireRestrictedApi(['COAP'])
+env.RequirePublicApi('UTILS_EXT')
+env.PublishPrivateApi('COAP_QAPI', INC_DIRS)
+env.RequireRestrictedApi(['LWM2M_STUB'])
+env.RequireRestrictedApi(['M2M_CORE'])
+env.RequireRestrictedApi(['NET_UTILS'])
+env.RequirePublicApi(['PSM_CLIENT'], area='ril')
+env.RequirePublicApi(['QAPI'], area='ril')
+env.RequirePublicApi(['LOCATION_API'],area='location')
+
+# Adding source files to be compiled
+LWM2M_SRC = [
+	'${BUILDPATH}/src/iotapp_location.cpp',
+	'${BUILDPATH}/src/lwm2mclient.c',
+	'${BUILDPATH}/src/transport_selection.c',
+	'${BUILDPATH}/src/object_access_control.c',
+	'${BUILDPATH}/src/object_connectivity_moni.c',
+	'${BUILDPATH}/src/object_connectivity_stat.c',
+	'${BUILDPATH}/src/object_device.c',
+	'${BUILDPATH}/src/object_firmware.c',
+	'${BUILDPATH}/src/object_location.c',
+	'${BUILDPATH}/src/object_security.c',
+	'${BUILDPATH}/src/object_server.c',
+	'${BUILDPATH}/src/system_api.c',
+	#'${BUILDPATH}/src/test_object.c',
+	'${BUILDPATH}/src/object_devicecap.c',
+	'${BUILDPATH}/src/object_software_mgnt.c',
+	'${BUILDPATH}/src/object_host_device.c',
+	'${BUILDPATH}/src/bootstrap_info.c',
+	'${BUILDPATH}/src/lwm2m_rx.c',
+	#'${BUILDPATH}/src/log_utils.c',
+	#'${BUILDPATH}/src/lwm2m_stub.c',
+  '${BUILDPATH}/src/sms_decode.c',
+  '${BUILDPATH}/src/lwm2m_carrier.c',
+  '${BUILDPATH}/src/object_apn_connection.c',
+  '${BUILDPATH}/src/object_cell_nw_connectivity.c',
+]
+
+IMAGES = ['DATA_TN', 'APPS_PROC','MOB_DATASERVICES']
+env.AddLibrary(IMAGES, ('${BUILDPATH}/lwm2m'), LWM2M_SRC)
+env.LoadSoftwareUnits()
+
+RCINIT_INIT_QTI_TASK_INIT_INT = {
+  'sequence_group'             : 'RCINIT_GROUP_4',           # required
+  'init_name'                  : 'lwm2m_client_start',           # required
+  'init_function'              : 'lwm2m_client_start',          # required
+  'dependencies'               : ['pal', 'qcli_app_start', 'coap_start']
+}
+
+RCINIT_INIT_QTI_TASK_INIT_EXT = {
+  'sequence_group'             : 'RCINIT_GROUP_4',           # required
+  'init_name'                  : 'lwm2m_client_start',           # required
+  'init_function'              : 'lwm2m_client_start',          # required
+  'dependencies'               : ['coap_start']
+}
+
+if 'USES_RCINIT' in env:
+	if 'QCLI_DISABLED' not in env:
+		RCINIT_IMG = ['CBSP_APPS_IMAGE', 'APPS_IMAGE','MOB_DATASERVICES']
+		env.AddRCInitFunc( RCINIT_IMG, RCINIT_INIT_QTI_TASK_INIT_INT )  
+	else:
+		RCINIT_IMG = ['CBSP_APPS_IMAGE', 'APPS_IMAGE','MOB_DATASERVICES']
+		env.AddRCInitFunc( RCINIT_IMG, RCINIT_INIT_QTI_TASK_INIT_EXT )  
+		
+RCINIT_INIT_QCMAP_TASK_INIT = {
+  'sequence_group'             : 'RCINIT_GROUP_2',           # required
+  'init_name'                  : 'lwm2m_cmdq',           # required
+  'init_function'              : 'lwm2m_pkt_task_init',          # required
+  'dependencies'               : ['coap_start']
+}
+
+RCINIT_INIT_QCMAP_TASK = { 
+  'sequence_group'             : 'RCINIT_GROUP_4',          # required 
+  'thread_name'                : 'lwm2m_cmdq_task',                 # required 
+  'thread_entry'               : 'lwm2m_cmdq_task_entry',            
+  'stack_size_bytes'           : '16384', 
+  'priority_amss_order'        : '51' 
+}
+
+if 'USES_RCINIT' in env: 
+  RCINIT_IMG = ['CBSP_APPS_IMAGE', 'APPS_IMAGE','MOB_DATASERVICES'] 
+  env.AddRCInitFunc( RCINIT_IMG, RCINIT_INIT_QCMAP_TASK_INIT  ) 
+  env.AddRCInitTask( RCINIT_IMG, RCINIT_INIT_QCMAP_TASK  ) 

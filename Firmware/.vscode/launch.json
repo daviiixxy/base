@@ -1,0 +1,43 @@
+
+/*
+    Developed by: Hêndrick Bataglin Gonçalves, HT Micron Advanced R&D.
+    Brief: Configurable launch settings. Feel free to adapt it according to your needs.
+*/
+
+{
+    "version": "0.2.0",
+    "projectName": "HTNB32L-XXX-OpenCPU",
+    "configurations": [
+        {
+            "name": "Debug - Template",
+            "cwd": "${workspaceRoot}",
+            "executable": "${workspaceRoot}/Build/Template/HTNB32L-XXX-Template.elf",
+            "request": "launch",
+            "type": "cortex-debug",
+            "servertype": "jlink",
+            "device": "CORTEX-M3",
+            "interface": "swd",
+            "runToEntryPoint": "main_entry",
+            "preLaunchTask": "Debug - Template", // configured in tasks.json
+            // "preLaunchCommands": ["Build all"], // you can execute command instead of task
+            // "svdFile": "${workspaceRoot}/Debug/SVD/HTNB32L-XXX.svd", // Include svd to watch device peripherals
+            "swoConfig":
+            {
+                "enabled": true,
+                "cpuFrequency": 160000000,
+                "swoFrequency": 4000000,
+                "source": "probe",
+                "decoders":
+                [
+                    {
+                        "label": "ITM port 0 output",
+                        "type": "console",
+                        "port": 0,
+                        "showOnStartup": true,
+                        "encoding": "ascii"
+                    }
+                ]
+            }
+        }, 
+    ]
+}
