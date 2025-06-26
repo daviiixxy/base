@@ -1,0 +1,143 @@
+#===============================================================================
+#
+# IoTApp Dataservices APSS TX Include Paths
+#
+# GENERAL DESCRIPTION
+#    build script
+#
+# Copyright (c) 2017-2020 by QUALCOMM Technologies, Inc. All Rights Reserved.
+#
+#-------------------------------------------------------------------------------
+#                      EDIT HISTORY FOR FILE
+#
+#  $Header: //components/dev/dataservices.tx/6.0/nchagant.dataservices.tx.6.0.07_07/iot_app/m2m/core/build/m2m_core.scons#1 $
+#  $DateTime: 2020/07/07 09:50:09 $
+#                      
+#  This section contains comments describing changes made to the module.
+#  Notice that changes are listed in reverse chronological order.
+#  
+#===============================================================================
+Import('env')
+
+env = env.Clone()
+
+if 'USES_ENABLE_LWM2M' not in env:
+	Return()
+
+#Setting build path
+SRCPATH = '${BUILD_ROOT}/dataservices/iot_app/m2m/core'
+env.VariantDir('${BUILDPATH}', SRCPATH, duplicate=0)
+
+# Setting compilation flags and macros
+#===============================================================================
+# WMS_SMS_SUPPORT - Macro will enable support to recevie MT SMS
+# LWM2M_CLIENT_MODE - Enables LWM2M Client behaviour 
+# LWM2M_LITTLE_ENDIAN - Enables Little Endian Format
+# AUTHORIZATION_SUPPORT - Enables ACL permission checking
+# ENABLE_DEVCAP_OBJ - Enables Device Capability Object
+# ENABLE_SOFTWARE_MGNT_OBJ - Enables Software Management Object 
+# LWM2M_SERVER_OBJECT - Enables Server Object Enhancements
+# CONNECTIVITY_STATS_ENHANCEMENT - Enables Connectivity Stats Object Enhancements
+# EP_ATTR_FIX - Enables EP attribute fix
+# ACL_OBJ_FIX - Enables ACL object fixes
+# LWM2M_SUPPORT_JSON - Enables JSON format support
+# BOOTSRAP_ENABLED - Enables Bootstrap Interface
+# ENABLE_CONN_MONITOR - Enables Connectivity Monitor Object
+# ENABLE_FIRMWARE_OBJ - Enables Firmware Object
+# ENABLE_CONN_STAT_OBJ - Enables Connectivity Stats Object
+# ENABLE_CELL_NW_CONN_OBJ - Enables Cellular Network Connectivity Object
+# ENABLE_APN_CONN_OBJ - Enables APN Connection Object
+# ENABLE_HOST_DEV_OBJ - Enables Host Device Object
+#===============================================================================
+env.Append(CFLAGS = ['-DLWM2M_CLIENT_MODE', '-DLWM2M_LITTLE_ENDIAN'])
+env.Append(CFLAGS = ['-DAUTHORIZATION_SUPPORT', '-DENABLE_DEVCAP_OBJ','-DENABLE_SOFTWARE_MGNT_OBJ', '-DENABLE_CONN_MONITOR', 
+					'-DLWM2M_SERVER_OBJECT', '-DCONNECTIVITY_STATS_ENHANCEMENT',
+					'-DENABLE_FIRMWARE_OBJ', '-DENABLE_CONN_STAT_OBJ', '-DENABLE_CELL_NW_CONN_OBJ', '-DENABLE_APN_CONN_OBJ','-DENABLE_HOST_DEV_OBJ', '-DLOGGING_SUPPORT', '-DEP_ATTR_FIX', '-DACL_OBJ_FIX', '-DWMS_SMS_SUPPORT'])
+
+#env.Append(CFLAGS = [])
+if 'yes' == env['CLI_LOGGING']:
+    env.Append(CFLAGS = ['-DCLI_LOGGING'])
+
+#Changes for MOB
+if 'USES_MOB' in env:
+	env.RequirePublicApi('STUB', area='offtarget')
+	env.RequirePublicApi('QAPI_STUB')
+	env.RequirePublicApi('SYSTEMDRIVERS')
+	env.RequirePublicApi('SERVICES')
+	env.RequirePublicApi(['PSM_CLIENT'],area='offtarget')
+	env.RequirePublicApi('DMS', area='qmimsgs')
+	env.RequirePublicApi('NAS', area='qmimsgs')
+	env.RequirePublicApi('UIM', area='qmimsgs')
+	env.RequirePublicApi('DSD', area='qmimsgs')
+	env.RequirePublicApi('WMS', area='qmimsgs')
+	env.RequirePublicApi('WDS', area='qmimsgs')
+	env.RequirePublicApi('COMMON', area='qmimsgs')
+	env.RequirePublicApi('IMS_IOT', area='qmimsgs')
+	env.RequirePublicApi('VOICE', area='qmimsgs')
+
+INC_DIRS = [
+   '${INC_ROOT}/dataservices/netservice/services/coap/api',
+]   
+    
+# Setting path for file inclusions
+env.RequirePublicApi('SYSTEMDRIVERS', area='core')
+env.RequirePublicApi(['KERNEL'], area='core')
+env.RequirePublicApi(['SERVICES'], area='core')
+env.RequirePublicApi(['STORAGE'], area='core')
+env.RequirePublicApi(['DAL'], area='core')
+env.RequirePublicApi(['DEBUGTOOLS'], area='core')
+env.RequirePublicApi('MPROC', area='core')
+env.RequirePublicApi(['DATASERVICES_NET_IPSTACK'])
+env.RequirePublicApi(['NICHESTACK'])
+env.RequirePublicApi(['DSS_NET'])
+env.RequirePublicApi(['QAPI'])
+env.RequireRestrictedApi(['DS_UTILS'])
+env.RequirePublicApi('MEMORY', area='core')
+env.RequirePublicApi('BUSES', area='core')
+env.RequireRestrictedApi(['QCLI_DEMO'])
+env.RequireRestrictedApi(['TS_M2M_COMMON'])
+env.RequirePublicApi('WDS', area='api')
+env.RequireRestrictedApi([
+	'LWM2M',
+	'M2M_CORE'
+])
+env.RequireRestrictedApi(['COAP'])
+env.RequirePublicApi(['PSM_CLIENT'], area='ril')
+env.RequirePublicApi(['QAPI'], area='ril')
+env.PublishPrivateApi('COAP_QAPI', INC_DIRS)
+# Adding source files to be compiled
+M2M_CORE_SRC = [
+	'${BUILDPATH}/src/liblwm2m.c',
+    '${BUILDPATH}/src/uri.c',
+    '${BUILDPATH}/src/utils.c',
+    '${BUILDPATH}/src/objects.c',
+    '${BUILDPATH}/src/tlv.c',
+    '${BUILDPATH}/src/data.c',
+    '${BUILDPATH}/src/lwm2m_list.c',
+    '${BUILDPATH}/src/packet.c',
+    '${BUILDPATH}/src/registration.c',
+    '${BUILDPATH}/src/management.c',
+    '${BUILDPATH}/src/observe.c',
+    '${BUILDPATH}/src/discover.c',
+    '${BUILDPATH}/src/platform.c',
+    '${BUILDPATH}/src/memtrace.c',
+    '${BUILDPATH}/src/memtrace.c',
+    '${BUILDPATH}/src/json.c'
+]
+
+if 'yes' == env['JSON_SUPPORTED']:
+    env.Append(CFLAGS = ['-DLWM2M_SUPPORT_JSON'])
+    
+if 'yes' == env['BOOTSRAP_ENABLED']:
+    env.Append(CFLAGS = ['-DLWM2M_BOOTSTRAP'])
+    M2M_CORE_SRC = [M2M_CORE_SRC, '${BUILDPATH}/src/bootstrap.c']
+	
+if 'LWM2M_PSM_ENABLED' in env:
+    M2M_CORE_SRC = [M2M_CORE_SRC, '${BUILDPATH}/src/lwm2m_psm.c']
+
+if 'yes' == env['TEST_ENABLED']:
+    env.Append(CFLAGS = ['-DUNIT_TEST'])
+
+IMAGES = ['DATA_TN', 'APPS_PROC','MOB_DATASERVICES']
+env.AddLibrary(IMAGES, ('${BUILDPATH}/m2m_core'), M2M_CORE_SRC)
+env.LoadSoftwareUnits()

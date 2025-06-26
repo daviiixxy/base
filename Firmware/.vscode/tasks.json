@@ -1,0 +1,45 @@
+/*
+    Developed by: Hêndrick Bataglin Gonçalves, HT Micron Advanced R&D.
+    Brief: Configure command in make to use desired amount of threads.
+*/
+
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Compile - Template",
+            "group": "build",
+            "type": "shell",
+            "command": "make.exe",
+            "args": ["-j4", "gccall", "TARGET=qcx212_0h00", "V=0", "PROJECT=Template"]
+        },
+        {
+            "label": "Debug - Template",
+            "group": "build",
+            "type": "shell",
+            "command": "python",
+            "args": ["Debug/Scripts/debug.py", "Template"]
+        },
+        {
+            "label": "Run - Template",
+            "group": "build",
+            "type": "shell",
+            "command": "python",
+            "args": ["Debug/Scripts/debug.py", "Template"]
+        },
+        {
+            "label": "COM Select",
+            "group": "build",
+            "type": "shell",
+            "command": "python",
+            "args": ["Debug/Scripts/GUI.py"]
+        },
+        {
+            "label": "Build clean",
+            "group": "build",
+            "type": "shell",
+            "command": "make",
+            "args": ["clean_all"]
+        }
+    ]
+}
