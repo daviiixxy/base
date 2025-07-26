@@ -93,17 +93,14 @@ typedef struct {
     uint8_t buzzer_state;                /**</ Estado do buzzer (0=OFF, 1=ON) */
     uint32_t door_open_time;             /**</ Tempo quando porta abriu (s) */
     uint32_t alarm_start_time;           /**</ Tempo quando alarme iniciou (s) */
+    uint32_t buzzer_start_time;          /**</ Tempo quando buzzer foi ligado (s) */
     uint32_t system_uptime;              /**</ Tempo de funcionamento (s) */
     uint8_t mqtt_connected;              /**</ Status da conexão MQTT (0=OFF, 1=ON) */
     uint8_t alarm_active;                /**</ Status do alarme (0=INACTIVE, 1=ACTIVE) */
 } HT_CoreHub_Data_t;
 
-/* Tasks FreeRTOS */
-void HT_CoreHub_MqttTask(void *pvParameters);
-
 /* Inicialização */
 void HT_CoreHub_InitTasks(void);
-void HT_CoreHub_StartTasks(void);
 
 #endif /* __HT_COREHUB_FSM_H__ */
 
