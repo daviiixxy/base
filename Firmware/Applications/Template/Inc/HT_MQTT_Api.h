@@ -76,7 +76,7 @@ uint8_t HT_MQTT_Connect(MQTTClient *mqtt_client, Network *mqtt_network, char *ad
                                         uint32_t sendbuf_size, uint8_t *readbuf, uint32_t readbuf_size);
 
 /*!******************************************************************
- * \fn void HT_MQTT_Publish(MQTTClient *mqtt_client, char *topic, uint8_t *payload, uint32_t len, enum QoS qos, uint8_t retained, uint16_t id, uint8_t dup)
+ * \fn int HT_MQTT_Publish(MQTTClient *mqtt_client, char *topic, uint8_t *payload, uint32_t len, enum QoS qos, uint8_t retained, uint16_t id, uint8_t dup)
 
  * \brief Send an MQTT publish packet and wait for all acks, depending on the QoSs option.
  *
@@ -90,9 +90,9 @@ uint8_t HT_MQTT_Connect(MQTTClient *mqtt_client, Network *mqtt_network, char *ad
  * \param[in] uint8_t dup                       DUP flag.
  * 
  * 
- * \retval none
+ * \retval int                                  0 = Success, !=0 = Error
  *******************************************************************/
-void HT_MQTT_Publish(MQTTClient *mqtt_client, char *topic, uint8_t *payload, uint32_t len, enum QoS qos, uint8_t retained, uint16_t id, uint8_t dup);
+int HT_MQTT_Publish(MQTTClient *mqtt_client, char *topic, uint8_t *payload, uint32_t len, enum QoS qos, uint8_t retained, uint16_t id, uint8_t dup);
 
 /*!******************************************************************
  * \fn void HT_MQTT_SubscribeCallback(MessageData *msg)

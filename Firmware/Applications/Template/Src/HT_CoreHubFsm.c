@@ -22,7 +22,72 @@
 #include "string.h"
 #include "FreeRTOS.h"
 #include "task.h"
-#include "osasys.h" 
+#include "osasys.h"
+#include "cJSON.h"
+
+// === SUPORTE A MÚLTIPLOS AMBIENTES (MESANINO, PROTOTIPAGEM, EXTERNO) ===
+typedef enum {
+    AMBIENTE_MESANINO = 0,
+    AMBIENTE_PROTOTIPAGEM,
+    AMBIENTE_EXTERNO,
+    NUM_AMBIENTES
+} CoreHub_AmbienteId;
+
+static const char* ambiente_nome[NUM_AMBIENTES] = { "mesanino", "prototipagem", "externo" };
+
+// Struct de ambiente (ainda sem lógica FSM/callback)
+typedef struct {
+    MQTTClient mqttClient;
+    Network mqttNetwork;
+    uint8_t mqttSendbuf[HT_COREHUB_MQTT_BUFFER_SIZE];
+    uint8_t mqttReadbuf[HT_COREHUB_MQTT_BUFFER_SIZE];
+    CoreHub_Data_t corehub_data;
+    CoreHub_FSM_States current_state;
+    // Buffers para retain/flags
+    volatile int new_temp_data;
+    volatile int new_hum_data;
+    float buffered_temp;
+    float buffered_hum;
+    char nome[16];
+} CoreHub_Ambiente_t;
+
+static CoreHub_Ambiente_t ambientes[NUM_AMBIENTES];
+
+// Função para montar tópicos dinâmicos
+static void monta_topico(char* buffer, size_t buflen, const char* ambiente, const char* recurso) {
+    snprintf(buffer, buflen, "hana/%s/%s", ambiente, recurso);
+}
+
+// Esqueleto da task de ambiente (ainda sem lógica FSM/callback)
+void CoreHub_AmbienteTask(void *pvParameters) {
+    CoreHub_Ambiente_t *amb = (CoreHub_Ambiente_t *)pvParameters;
+    char topic_door[64], topic_light[64], topic_buzzer[64], topic_temp[64], topic_hum[64], topic_ac_power[64], topic_ac_temp[64];
+    monta_topico(topic_door, sizeof(topic_door), amb->nome, "smartdoor/door");
+    monta_topico(topic_light, sizeof(topic_light), amb->nome, "smartdoor/light");
+    monta_topico(topic_buzzer, sizeof(topic_buzzer), amb->nome, "smartdoor/buzzer");
+    monta_topico(topic_temp, sizeof(topic_temp), amb->nome, "senseclima/01/temperature");
+    monta_topico(topic_hum, sizeof(topic_hum), amb->nome, "senseclima/01/humidity");
+    monta_topico(topic_ac_power, sizeof(topic_ac_power), amb->nome, "aircontrol/01/power");
+    monta_topico(topic_ac_temp, sizeof(topic_ac_temp), amb->nome, "aircontrol/01/temperature");
+    // ... inicialização MQTT, subscribe, FSM, etc (ainda não implementado)
+    while (1) {
+        // Aqui futuramente rodará a FSM/callback para este ambiente
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
+
+// Inicialização das tasks para cada ambiente
+void CoreHub_InitAmbientes(void) {
+    for (int i = 0; i < NUM_AMBIENTES; ++i) {
+        memset(&ambientes[i], 0, sizeof(CoreHub_Ambiente_t));
+        strcpy(ambientes[i].nome, ambiente_nome[i]);
+        ambientes[i].current_state = COREHUB_INIT_STATE;
+        // ... inicialização MQTT, buffers, etc (ainda não implementado)
+        xTaskCreate(CoreHub_AmbienteTask, ambientes[i].nome, 2048, &ambientes[i], 2, NULL);
+    }
+}
+// === FIM SUPORTE A MÚLTIPLOS AMBIENTES ===
+// Chame CoreHub_InitAmbientes() na inicialização principal do sistema para ativar as tasks dos ambientes.
 
 /* Estados da FSM - Exatamente como no diagrama */
 typedef enum {
@@ -65,6 +130,11 @@ static CoreHub_FSM_States current_state = COREHUB_INIT_STATE;
 static TaskHandle_t xMqttTaskHandle = NULL;
 static uint8_t mqtt_connection_active = 0;
 
+static volatile int new_temp_data = 0;
+static volatile int new_hum_data = 0;
+static float buffered_temp = 0.0f;
+static float buffered_hum = 0.0f;
+
 /* Configurações MQTT */
 static const char clientID[] = {"corehub01"};
 static const char username[] = {""};
@@ -93,11 +163,56 @@ static uint32_t CoreHub_GetTimeSecs(void) {
     return current_time - start_time;
 }
 
-/* Função para converter string para float */
+/* Conversão manual de string para float para ambientes embarcados */
+static float simple_str_to_float(const char* str) {
+    float result = 0.0f, factor = 1.0f;
+    int sign = 1, point_seen = 0;
+    if (!str) return 0.0f;
+    if (*str == '-') { sign = -1; str++; }
+    for (; *str; str++) {
+        // Debug: print cada caractere
+        printf("CoreHub - DEBUG: analisando char: '%c'\n", *str);
+        if (*str == '.') {
+            point_seen = 1;
+            continue;
+        }
+        if (*str < '0' || *str > '9') break;
+        if (point_seen) {
+            factor /= 10.0f;
+            result += (*str - '0') * factor;
+        } else {
+            result = result * 10.0f + (*str - '0');
+        }
+    }
+    float final = sign * result;
+    // Convert to integer for display (multiply by 10 to show 1 decimal place)
+    int display_value = (int)(final * 10);
+    printf("CoreHub - DEBUG: resultado conversão manual = %d.%d\n", display_value/10, display_value%10);
+    return final;
+}
+
 static float string_to_float(const char* str) {
-    float result = 0.0f;
-    sscanf(str, "%f", &result);
+    float result = simple_str_to_float(str);
+    // Convert to integer for display
+    int display_value = (int)(result * 10);
+    printf("CoreHub - DEBUG: string_to_float('%s') = %d.%d\n", str ? str : "NULL", display_value/10, display_value%10);
     return result;
+}
+
+// Adicione no topo do arquivo, após includes:
+static int CoreHub_MQTTPublishWithRetry(MQTTClient *mqtt_client, char *topic, uint8_t *payload, uint32_t len, enum QoS qos, uint8_t retained, uint16_t id, uint8_t dup, int max_retries) {
+    int rc = -1;
+    for (int attempt = 1; attempt <= max_retries; ++attempt) {
+        rc = HT_MQTT_Publish(mqtt_client, topic, payload, len, qos, retained, id, dup);
+        if (rc == 0) {
+            if (attempt > 1) printf("[INFO] Publish no tópico %s OK na tentativa %d\n", topic, attempt);
+            return 0;
+        }
+        printf("[ERRO] Falha ao publicar no tópico %s (tentativa %d)\n", topic, attempt);
+        vTaskDelay(pdMS_TO_TICKS(200));
+    }
+    printf("[ERRO] Todas as tentativas de publish falharam para o tópico %s\n", topic);
+    return rc;
 }
 
 /* Callback para mensagens MQTT */
@@ -158,20 +273,16 @@ static void HT_CoreHub_MessageCallback(MessageData *msg) {
         current_state = COREHUB_ANALYZE_DOOR_STATE;
     }
     else if (strstr(topic, "senseclima/01/temperature")) {
-        float temp = string_to_float(payload);
-        if (temp > 0.0f) {
-            corehub_data.temperature = temp;
-            printf("CoreHub - Temperatura: %.1f°C\n", corehub_data.temperature);
-            // Transição: Msg: SenseClima --> Análise: Temperatura
-            current_state = COREHUB_ANALYZE_TEMP_STATE;
-        }
+        float temperature = string_to_float(payload);
+        buffered_temp = temperature;
+        new_temp_data = 1;
+        printf("CoreHub - DEBUG: Bufferizou temperatura = %f\n", buffered_temp);
     }
     else if (strstr(topic, "senseclima/01/humidity")) {
-        float hum = string_to_float(payload);
-        if (hum > 0.0f) {
-            corehub_data.humidity = hum;
-            printf("CoreHub - Umidade: %.1f%%\n", corehub_data.humidity);
-        }
+        float humidity = string_to_float(payload);
+        buffered_hum = humidity;
+        new_hum_data = 1;
+        printf("CoreHub - DEBUG: Bufferizou umidade = %f\n", buffered_hum);
     }
     else if (strstr(topic, "aircontrol/01/power")) {
         corehub_data.ac_state = (strcmp(payload, "ON") == 0) ? 1 : 0;
@@ -192,13 +303,15 @@ static void HT_CoreHub_PrintStatus(void) {
     printf("Alarme: %s\n", corehub_data.alarm_active ? "ATIVO" : "INATIVO");
     
     if (corehub_data.temperature > 0.0f) {
-        printf("Temperatura: %.1f°C\n", corehub_data.temperature);
+        int temp_display = (int)(corehub_data.temperature * 10);
+        printf("Temperatura: %d.%d°C\n", temp_display/10, temp_display%10);
     } else {
         printf("Temperatura: Não recebida\n");
     }
     
     if (corehub_data.humidity > 0.0f) {
-        printf("Umidade: %.1f%%\n", corehub_data.humidity);
+        int hum_display = (int)(corehub_data.humidity * 10);
+        printf("Umidade: %d.%d%%\n", hum_display/10, hum_display%10);
     } else {
         printf("Umidade: Não recebida\n");
     }
@@ -240,6 +353,40 @@ static void HT_CoreHub_StateMachine(void) {
         case COREHUB_IDLE_STATE:
             // Ocioso: Aguardando Eventos
             // Não faz nada, apenas aguarda mensagens MQTT
+            if (new_temp_data) {
+                corehub_data.temperature = buffered_temp;
+                new_temp_data = 0;
+                int temp_display = (int)(corehub_data.temperature * 10);
+                printf("CoreHub - DEBUG: Valor da temperatura na struct = %d.%d\n", temp_display/10, temp_display%10);
+                printf("CoreHub - FSM: Temperatura=%d.%d°C\n", temp_display/10, temp_display%10);
+                // Verifica se pode controlar o AC: porta fechada E luz ligada E alarme/buzzer inativo
+                if (corehub_data.door_state == 0 && corehub_data.light_state == 1 && !corehub_data.alarm_active && !corehub_data.buzzer_state) {
+                    printf("CoreHub - FSM: Condições OK (Porta FECHADA, Luz LIGADA, Alarme INATIVO, Buzzer DESLIGADO) - Analisando temperatura\n");
+                    if (corehub_data.temperature > HT_COREHUB_TEMP_LIMIT_UPPER) {
+                        printf("CoreHub - FSM: Temp > %.1f°C --> AC_ON_STATE\n", HT_COREHUB_TEMP_LIMIT_UPPER);
+                        current_state = COREHUB_AC_ON_STATE;
+                    } else if (corehub_data.temperature < HT_COREHUB_TEMP_LIMIT_LOWER) {
+                        printf("CoreHub - FSM: Temp < %.1f°C --> AC_OFF_STATE\n", HT_COREHUB_TEMP_LIMIT_LOWER);
+                        current_state = COREHUB_AC_OFF_STATE;
+                    } else {
+                        printf("CoreHub - FSM: Temperatura normal --> IDLE_STATE\n");
+                        // Permanece em IDLE_STATE
+                    }
+                } else {
+                    printf("CoreHub - FSM: Condições não atendidas (Porta: %s, Luz: %s, Alarme: %s, Buzzer: %s) --> Ignorando SenseClima\n", 
+                        corehub_data.door_state ? "ABERTA" : "FECHADA",
+                        corehub_data.light_state ? "LIGADA" : "DESLIGADA",
+                        corehub_data.alarm_active ? "ATIVO" : "INATIVO",
+                        corehub_data.buzzer_state ? "LIGADO" : "DESLIGADO");
+                }
+            }
+            if (new_hum_data) {
+                corehub_data.humidity = buffered_hum;
+                new_hum_data = 0;
+                int hum_display = (int)(corehub_data.humidity * 10);
+                printf("CoreHub - DEBUG: Umidade salva na struct = %d.%d\n", hum_display/10, hum_display%10);
+                printf("CoreHub - Umidade: %d.%d%%\n", hum_display/10, hum_display%10);
+            }
             break;
 
         case COREHUB_RECONNECT_STATE:
@@ -271,35 +418,25 @@ static void HT_CoreHub_StateMachine(void) {
             }
             break;
 
-        case COREHUB_ANALYZE_TEMP_STATE:
-            printf("CoreHub - FSM: ANALYZE_TEMP_STATE (Análise: Temperatura)\n");
-            printf("CoreHub - FSM: Temperatura=%.1f°C\n", corehub_data.temperature);
-            
-            if (corehub_data.temperature > HT_COREHUB_TEMP_LIMIT_UPPER) {
-                // Transição: Temp. > LIM_SUPERIOR --> Ligar Ar Condicionado
-                printf("CoreHub - FSM: Temp > %.1f°C --> AC_ON_STATE\n", HT_COREHUB_TEMP_LIMIT_UPPER);
-                current_state = COREHUB_AC_ON_STATE;
-            } else if (corehub_data.temperature < HT_COREHUB_TEMP_LIMIT_LOWER) {
-                // Transição: Temp. < LIM_INFERIOR --> Desligar Ar Condicionado
-                printf("CoreHub - FSM: Temp < %.1f°C --> AC_OFF_STATE\n", HT_COREHUB_TEMP_LIMIT_LOWER);
-                current_state = COREHUB_AC_OFF_STATE;
-            } else {
-                // Temperatura normal --> Volta para Ocioso
-                printf("CoreHub - FSM: Temperatura normal --> IDLE_STATE\n");
-                current_state = COREHUB_IDLE_STATE;
-            }
-            break;
-
         case COREHUB_AC_ON_STATE:
             printf("CoreHub - FSM: AC_ON_STATE (Ligar Ar Condicionado)\n");
             if (!corehub_data.ac_state) {
-                HT_MQTT_Publish(&mqttClient, (char*)topic_aircontrol_power, (uint8_t*)"ON", 2, QOS0, 1, 0, 0);
+                // Verifica se veio do ANALYZE_DOOR_STATE (liga power) ou ANALYZE_TEMP_STATE (só temperatura)
+                if (corehub_data.door_state == 0 && corehub_data.light_state == 1) {
+                    // Veio do ANALYZE_DOOR_STATE - liga o AC
+                    int rc = CoreHub_MQTTPublishWithRetry(&mqttClient, (char*)topic_aircontrol_power, (uint8_t*)"ON", 2, QOS0, 1, 0, 0, 3);
+                    if (rc == 0) printf("CoreHub - Publicado: %s = ON (ANALYZE_DOOR_STATE)\n", topic_aircontrol_power);
+                } else {
+                    // Veio do ANALYZE_TEMP_STATE - só ajusta temperatura
+                    printf("CoreHub - Apenas ajustando temperatura (ANALYZE_TEMP_STATE)\n");
+                }
+                
+                // Sempre ajusta o setpoint de temperatura
                 char temp_str[8];
                 sprintf(temp_str, "%d", HT_COREHUB_AC_TEMP_SETPOINT);
-                HT_MQTT_Publish(&mqttClient, (char*)topic_aircontrol_temp, (uint8_t*)temp_str, strlen(temp_str), QOS0, 1, 0, 0);
+                int rc = CoreHub_MQTTPublishWithRetry(&mqttClient, (char*)topic_aircontrol_temp, (uint8_t*)temp_str, strlen(temp_str), QOS0, 1, 0, 0, 3);
+                if (rc == 0) printf("CoreHub - Publicado: %s = %s\n", topic_aircontrol_temp, temp_str);
                 corehub_data.ac_state = 1;
-                printf("CoreHub - Publicado: %s = ON\n", topic_aircontrol_power);
-                printf("CoreHub - Publicado: %s = %s\n", topic_aircontrol_temp, temp_str);
             }
             // Transição: Ligar Ar Condicionado --> Ocioso
             current_state = COREHUB_IDLE_STATE;
@@ -308,9 +445,16 @@ static void HT_CoreHub_StateMachine(void) {
         case COREHUB_AC_OFF_STATE:
             printf("CoreHub - FSM: AC_OFF_STATE (Desligar Ar Condicionado)\n");
             if (corehub_data.ac_state) {
-                HT_MQTT_Publish(&mqttClient, (char*)topic_aircontrol_power, (uint8_t*)"OFF", 3, QOS0, 1, 0, 0);
+                // Verifica se veio do ANALYZE_DOOR_STATE (desliga power) ou ANALYZE_TEMP_STATE (só temperatura)
+                if (corehub_data.light_state == 0) {
+                    // Veio do ANALYZE_DOOR_STATE - desliga o AC
+                    int rc = CoreHub_MQTTPublishWithRetry(&mqttClient, (char*)topic_aircontrol_power, (uint8_t*)"OFF", 3, QOS0, 1, 0, 0, 3);
+                    if (rc == 0) printf("CoreHub - Publicado: %s = OFF (ANALYZE_DOOR_STATE)\n", topic_aircontrol_power);
+                } else {
+                    // Veio do ANALYZE_TEMP_STATE - só faz log
+                    printf("CoreHub - AC setado como DESLIGADO (apenas local, ANALYZE_TEMP_STATE)\n");
+                }
                 corehub_data.ac_state = 0;
-                printf("CoreHub - Publicado: %s = OFF\n", topic_aircontrol_power);
             }
             // Transição: Desligar Ar Condicionado --> Ocioso
             current_state = COREHUB_IDLE_STATE;
@@ -367,10 +511,10 @@ static void HT_CoreHub_StateMachine(void) {
         case COREHUB_BUZZER_ON_STATE:
             printf("CoreHub - FSM: BUZZER_ON_STATE (Ligar Buzzer)\n");
             if (!corehub_data.buzzer_state) {
-                HT_MQTT_Publish(&mqttClient, (char*)topic_smartdoor_buzzer, (uint8_t*)"ON", 2, QOS0, 1, 0, 0);
+                int rc = CoreHub_MQTTPublishWithRetry(&mqttClient, (char*)topic_smartdoor_buzzer, (uint8_t*)"ON", 2, QOS0, 1, 0, 0, 3);
+                if (rc == 0) printf("CoreHub - Publicado: %s = ON\n", topic_smartdoor_buzzer);
                 corehub_data.buzzer_state = 1;
                 corehub_data.buzzer_start_time = CoreHub_GetTimeSecs(); // Registra quando ligou
-                printf("CoreHub - Publicado: %s = ON\n", topic_smartdoor_buzzer);
                 printf("CoreHub - Buzzer ligado às %lu s\n", corehub_data.buzzer_start_time);
             }
             // Transição: Ligar Buzzer --> Ocioso
@@ -380,9 +524,9 @@ static void HT_CoreHub_StateMachine(void) {
         case COREHUB_BUZZER_OFF_STATE:
             printf("CoreHub - FSM: BUZZER_OFF_STATE (Desligar Buzzer)\n");
             if (corehub_data.buzzer_state) {
-                HT_MQTT_Publish(&mqttClient, (char*)topic_smartdoor_buzzer, (uint8_t*)"OFF", 3, QOS0, 1, 0, 0);
+                int rc = CoreHub_MQTTPublishWithRetry(&mqttClient, (char*)topic_smartdoor_buzzer, (uint8_t*)"OFF", 3, QOS0, 1, 0, 0, 3);
+                if (rc == 0) printf("CoreHub - Publicado: %s = OFF\n", topic_smartdoor_buzzer);
                 corehub_data.buzzer_state = 0;
-                printf("CoreHub - Publicado: %s = OFF\n", topic_smartdoor_buzzer);
             }
             
             // Desativa completamente o alarme
