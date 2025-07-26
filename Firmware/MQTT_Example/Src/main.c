@@ -1,23 +1,22 @@
-/*
- * CoreHub - Main Application (Baseado no MQTT_EXAMPLE)
- * 
- * Copyright (c) 2024
- * 
- * Arquivo principal que integra o CoreHub com o sistema HTNB32L
- * Seguindo a estrutura do MQTT_EXAMPLE
+/**
+ *
+ * Copyright (c) 2023 HT Micron Semicondutores S.A.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
  */
 
-#include "string.h"
-#include "bsp.h"
-#include "ostask.h"
-#include "debug_log.h"
-#include "FreeRTOS.h"
 #include "main.h"
-#include "HT_MQTT_Api.h"
 #include "ps_lib_api.h"
-#include "HT_CoreHubFsm.h"
+#include "flash_qcx212.h"
 
-/* Variáveis globais do sistema */
 static StaticTask_t initTask;
 static uint8_t appTaskStack[INIT_TASK_STACK_SIZE];
 static volatile uint32_t Event;
@@ -26,17 +25,18 @@ static uint8_t gImsi[16] = {0};
 static uint32_t gCellID = 0;
 static NmAtiSyncRet gNetworkInfo;
 static uint8_t mqttEpSlpHandler = 0xff;
+
 static volatile uint8_t simReady = 0;
 
-/* Configuração UART */
 static uint32_t uart_cntrl = (ARM_USART_MODE_ASYNCHRONOUS | ARM_USART_DATA_BITS_8 | ARM_USART_PARITY_NONE | 
                                 ARM_USART_STOP_BITS_1 | ARM_USART_FLOW_CONTROL_NONE);
 
-/* Declarações externas */
+trace_add_module(APP, P_INFO);
+
 extern void mqtt_demo_onenet(void);
+
 extern USART_HandleTypeDef huart1;
 
-/* Função para configurar parâmetros de conexão */
 static void HT_SetConnectioParameters(void) {
     uint8_t cid = 0;
     PsAPNSetting apnSetting;
@@ -51,13 +51,12 @@ static void HT_SetConnectioParameters(void) {
     }
 
     apnSetting.cid = 0;
-    apnSetting.apnLength = strlen("iot.datatem.com.br");
-    strcpy((char *)apnSetting.apnStr, "iot.datatem.com.br");
+    apnSetting.apnLength = strlen("nbiot.gsim");
+    strcpy((char *)apnSetting.apnStr, "nbiot.gsim");
     apnSetting.pdnType = CMI_PS_PDN_TYPE_IP_V4V6;
     ret = appSetAPNSettingSync(&apnSetting, &cid);
 }
 
-/* Função para enviar mensagem para a fila */
 static void sendQueueMsg(uint32_t msgId, uint32_t xTickstoWait) {
     eventCallbackMessage_t *queueMsg = NULL;
     queueMsg = malloc(sizeof(eventCallbackMessage_t));
@@ -71,7 +70,6 @@ static void sendQueueMsg(uint32_t msgId, uint32_t xTickstoWait) {
     }
 }
 
-/* Callback para eventos de rede */
 static INT32 registerPSUrcCallback(urcID_t eventID, void *param, uint32_t paramLen) {
     CmiSimImsiStr *imsi = NULL;
     CmiPsCeregInd *cereg = NULL;
@@ -85,7 +83,6 @@ static INT32 registerPSUrcCallback(urcID_t eventID, void *param, uint32_t paramL
             imsi = (CmiSimImsiStr *)param;
             memcpy(gImsi, imsi->contents, imsi->length);
             simReady = 1;
-            printf("SIM Ready - IMSI: %s\n", gImsi);
             break;
         }
         case NB_URC_ID_MM_SIGQ:
@@ -125,8 +122,7 @@ static INT32 registerPSUrcCallback(urcID_t eventID, void *param, uint32_t paramL
     return 0;
 }
 
-/* Task principal do CoreHub (baseada no MQTT_EXAMPLE) */
-static void HT_CoreHubTask(void *arg){
+static void HT_MQTTExampleTask(void *arg){
     int32_t ret;
     uint8_t psmMode = 0, actType = 0;
     uint16_t tac = 0;
@@ -134,7 +130,6 @@ static void HT_CoreHubTask(void *arg){
 
     eventCallbackMessage_t *queueItem = NULL;
 
-    /* Registra callback de eventos de rede */
     registerPSEventCallback(NB_GROUP_ALL_MASK, registerPSUrcCallback);
     psEventQueueHandle = xQueueCreate(APP_EVENT_QUEUE_SIZE, sizeof(eventCallbackMessage_t*));
     if (psEventQueueHandle == NULL)
@@ -143,29 +138,16 @@ static void HT_CoreHubTask(void *arg){
         return;
     }
 
-    /* Configura gerenciamento de sleep */
     slpManApplyPlatVoteHandle("EP_MQTT",&mqttEpSlpHandler);
-    slpManPlatVoteDisableSleep(mqttEpSlpHandler, SLP_ACTIVE_STATE);
-    
-    HT_TRACE(UNILOG_MQTT, mqttAppTask1, P_INFO, 0, "CoreHub iniciando...");
+    slpManPlatVoteDisableSleep(mqttEpSlpHandler, SLP_ACTIVE_STATE); //SLP_SLP2_STATE 
+    HT_TRACE(UNILOG_MQTT, mqttAppTask1, P_INFO, 0, "first time run mqtt example");
 
-    /* Inicializa UART para debug */
     HAL_USART_InitPrint(&huart1, GPR_UART1ClkSel_26M, uart_cntrl, 115200);
-    printf("=== CoreHub - Central de Decisão e Automação ===\n");
-    printf("Aguardando SIM e rede NB-IoT...\n");
-    
-    /* Aguarda SIM estar pronto */
-    while(!simReady) {
-        osDelay(100);
-    }
-    
-    /* Configura parâmetros de conexão */
+    printf("HTNB32L-XXX MQTT Example!\n");
+    printf("Trying to connect...\n");
+    while(!simReady);
     HT_SetConnectioParameters();
 
-    printf("Iniciando CoreHub...\n");
-    static uint8_t corehub_tasks_started = 0;
-
-    /* Loop principal de eventos de rede */
     while (1)
     {
         if (xQueueReceive(psEventQueueHandle, &queueItem, portMAX_DELAY))
@@ -175,8 +157,6 @@ static void HT_CoreHubTask(void *arg){
                 case QMSG_ID_NW_IPV4_READY:
                 case QMSG_ID_NW_IPV6_READY:
                 case QMSG_ID_NW_IPV4_6_READY:
-                    printf("Rede NB-IoT pronta!\n");
-                    
                     appGetImsiNumSync((CHAR *)gImsi);
                     HT_STRING(UNILOG_MQTT, mqttAppTask2, P_SIG, "IMSI = %s", gImsi);
                 
@@ -186,11 +166,12 @@ static void HT_CoreHubTask(void *arg){
                                                                       ((UINT8 *)&gNetworkInfo.body.netInfoRet.netifInfo.ipv4Info.ipv4Addr.addr)[1],
                                                                       ((UINT8 *)&gNetworkInfo.body.netInfoRet.netifInfo.ipv4Info.ipv4Addr.addr)[2],
                                                                       ((UINT8 *)&gNetworkInfo.body.netInfoRet.netifInfo.ipv4Info.ipv4Addr.addr)[3]);
-                    
                     ret = appGetLocationInfoSync(&tac, &cellID);
                     HT_TRACE(UNILOG_MQTT, mqttAppTask4, P_INFO, 3, "tac=%d, cellID=%d ret=%d", tac, cellID, ret);
-                    
+                    //edrxModeValue = CMI_MM_ENABLE_EDRX_AND_ENABLE_IND;
                     actType = CMI_MM_EDRX_NB_IOT;
+                    //reqEdrxValueMs = 20480;
+                    // appSetEDRXSettingSync(edrxModeValue, actType, reqEdrxValueMs);
                     ret = appGetEDRXSettingSync(&actType, &nwEdrxValueMs, &nwPtwMs);
                     HT_TRACE(UNILOG_MQTT, mqttAppTask5, P_INFO, 4, "actType=%d, nwEdrxValueMs=%d nwPtwMs=%d ret=%d", actType, nwEdrxValueMs, nwPtwMs, ret);
 
@@ -198,30 +179,14 @@ static void HT_CoreHubTask(void *arg){
                     tauTime = 4000;
                     activeTime = 30;
 
-                    appGetPSMSettingSync(&psmMode, &tauTime, &activeTime);
-                    HT_TRACE(UNILOG_MQTT, mqttAppTask6, P_INFO, 3, "Get PSM info mode=%d, TAU=%d, ActiveTime=%d", psmMode, tauTime, activeTime);
-
-                    /* Inicia o CoreHub FSM apenas uma vez */
-                    if (!corehub_tasks_started) {
-                        printf("=== CoreHub - Iniciando Sistema ===\n");
-                        printf("Rede NB-IoT: OK\n");
-                        printf("IP: %u.%u.%u.%u\n", 
-                               ((UINT8 *)&gNetworkInfo.body.netInfoRet.netifInfo.ipv4Info.ipv4Addr.addr)[0],
-                               ((UINT8 *)&gNetworkInfo.body.netInfoRet.netifInfo.ipv4Info.ipv4Addr.addr)[1],
-                               ((UINT8 *)&gNetworkInfo.body.netInfoRet.netifInfo.ipv4Info.ipv4Addr.addr)[2],
-                               ((UINT8 *)&gNetworkInfo.body.netInfoRet.netifInfo.ipv4Info.ipv4Addr.addr)[3]);
-                        printf("Cell ID: %lu\n", cellID);
-                        printf("TAC: %u\n", tac);
-                        printf("Iniciando tasks do CoreHub...\n");
-                        
-                        HT_CoreHub_InitTasks();
-                        HT_CoreHub_StartTasks();
-                        corehub_tasks_started = 1;
-                        printf("CoreHub iniciado com sucesso!\n");
-                        printf("=== Sistema Pronto para Operação ===\n");
+                    {
+                        appGetPSMSettingSync(&psmMode, &tauTime, &activeTime);
+                        HT_TRACE(UNILOG_MQTT, mqttAppTask6, P_INFO, 3, "Get PSM info mode=%d, TAU=%d, ActiveTime=%d", psmMode, tauTime, activeTime);
                     }
-                    break;
 
+                    HT_Fsm();
+               
+                    break;
                 case QMSG_ID_NW_DISCONNECT:
                     break;
 
@@ -231,9 +196,9 @@ static void HT_CoreHubTask(void *arg){
             free(queueItem);
         }
     }
+
 }
 
-/* Função de inicialização da aplicação */
 static void appInit(void *arg) {
     osThreadAttr_t task_attr;
 
@@ -242,19 +207,26 @@ static void appInit(void *arg) {
     
     memset(&task_attr,0,sizeof(task_attr));
     memset(appTaskStack, 0xA5,INIT_TASK_STACK_SIZE);
-    task_attr.name = "HT_CoreHub";
+    task_attr.name = "HT_MQTTExample";
     task_attr.stack_mem = appTaskStack;
     task_attr.stack_size = INIT_TASK_STACK_SIZE;
     task_attr.priority = osPriorityNormal;
-    task_attr.cb_mem = &initTask;
-    task_attr.cb_size = sizeof(StaticTask_t);
+    task_attr.cb_mem = &initTask;//task control block
+    task_attr.cb_size = sizeof(StaticTask_t);//size of task control block
 
-    osThreadNew(HT_CoreHubTask, NULL, &task_attr);
+    osThreadNew(HT_MQTTExampleTask, NULL, &task_attr);
 }
 
-/* Entry point da aplicação */
+
+/**
+  \fn          int main_entry(void)
+  \brief       main entry function.
+  \return
+*/
 void main_entry(void) {
+
     BSP_CommonInit();
+    HT_GPIO_LedInit();
 
     osKernelInitialize();
 
@@ -266,4 +238,7 @@ void main_entry(void) {
         osKernelStart();
     }
     while(1);
+
 }
+
+/************************ HT Micron Semicondutores S.A *****END OF FILE****/

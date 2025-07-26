@@ -1,14 +1,14 @@
 /*
 
-           _           _       _  _    ___  
-          | |         | |     | || |  / _ \ 
-          | |     __ _| |__   | || |_| | | |
-          | |    / _` | '_ \  |__   _| | | |
-          | |___| (_| | |_) |    | |_| |_| |
-          |______\__,_|_.__/     |_(_)\___/  
- =================== Lab 4.0 =====================
+  _    _ _______   __  __ _____ _____ _____   ____  _   _
+ | |  | |__   __| |  \/  |_   _/ ____|  __ \ / __ \| \ | |
+ | |__| |  | |    | \  / | | || |    | |__) | |  | |  \| |
+ |  __  |  | |    | |\/| | | || |    |  _  /| |  | | . ` |
+ | |  | |  | |    | |  | |_| || |____| | \ \| |__| | |\  |
+ |_|  |_|  |_|    |_|  |_|_____\_____|_|  \_\\____/|_| \_|
+ =================== Advanced R&D ========================
 
- Copyright (c) 2025 Laboratório 4.0 - Projeto Educacional
+ Copyright (c) 2023 HT Micron Semicondutores S.A.
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
  You may obtain a copy of the License at
@@ -20,9 +20,27 @@
  limitations under the License.
 
 */
-#pragma once
+
+/*!
+ * \file main.h
+ * \brief Main file of HTNB32L-XXX MQTT Example. 
+  * \author HT Micron Advanced R&D,
+ *         Hêndrick Bataglin Gonçalves, Christian Roberto Lehmen,  Matheus da Silva Zorzeto, Felipe Kalinski Ferreira,
+ *         Leandro Borges, Mauricio Carlotto Ribeiro, Henrique Kuhn, Cleber Haack, Eduardo Mendel
+ *         Gleiser Alvarez Arrojo
+ * 
+ * \link https://github.com/htmicron
+ * \version 1.0
+ * \date February 23, 2023
+ */
+
+#ifndef __MAIN_H__
+#define __MAIN_H__
 
 #include "htnb32lxxx_hal_usart.h"
+#include "HT_Fsm.h"
+#include "HT_GPIO_Api.h"
+
 #include "bsp.h"
 #include "HT_BSP_Custom.h"
 #include "osasys.h"
@@ -42,14 +60,13 @@
 #include "plat_config.h"
 #include "debug_trace.h"
 #include "hal_uart.h"
+#include "HT_MQTT_Api.h"
 #include "flash_qcx212.h"
 #include "flash_qcx212_rt.h"
 #include "slpman_qcx212.h"
 #include "FreeRTOS.h"
 #include "netmgr.h"
 #include <stdio.h>
-#include "cmsis_os2.h"
-
 
 /* Defines  ------------------------------------------------------------------*/
 
@@ -62,13 +79,10 @@
 #define QMSG_ID_SOCK_RECVPKG       (QMSG_ID_BASE + 5)
 
 #define INIT_TASK_STACK_SIZE    (1024*6)
-#define INIT_TASK_PRIORITY      (osPriorityNormal)
+#define RINGBUF_READY_FLAG      (0x06)
 #define APP_EVENT_QUEUE_SIZE    (10)
-#define HTTP_RECV_BUF_SIZE      (1300)
-#define HTTP_URL_BUF_LEN        (128)
+#define MAX_PACKET_SIZE         (256)
 
-/* Funções */
-void HT_CoreHubFsm(void);
+#endif /* __MAIN_H__ */
 
 /************************ HT Micron Semicondutores S.A *****END OF FILE****/
-
